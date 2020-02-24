@@ -1,0 +1,13 @@
+{
+    "guild_id": 0,
+    "guild_name": "\ub77c\ud53c\uc2a4 \uc791\uc5c5\uc2e4",
+    "bot_notice_ch_id": 628430272177897484,
+    "role_setting_msg_ids": [
+        0,
+        0
+    ],
+    "roles_dict": {
+        "game": {},
+        "features": {}
+    }
+}
