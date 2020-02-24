@@ -59,11 +59,14 @@ def init():
             server_config_dict[config['guild_name']] = config
             server_config_file.close()
         except FileNotFoundError as e:
-            print('[init] > 파일을 열지 못했습니다!')
-            print(f'[init] > {e.with_traceback()}')
+            print('[init] > 파일을 열지 못했습니다! 파일을 생성합니다.')
+            server_config_file = open(file=f'./server_setting/{file}', mode='wt', encoding='UTF8')
+            server_config_file.write('{}')
+            server_config_dict[file.replace('_config.json', '')] = {}
+            print(f'[init] > {e}')
         except Exception as e:
             print('[init] > 오류가 발생했습니다!')
-            print(f'[init] > {e.with_traceback()}')
+            print(f'[init] > {e}')
             
         print(f'server_config_dict = {server_config_dict}')
 
@@ -79,7 +82,7 @@ def save_datas():
         bot_config_file.close()
     except Exception as e:
         print('[save_datas] > 오류가 발생했습니다!')
-        print(f'[save_datas] > {e.with_traceback()}')
+        print(f'[save_datas] > {e}')
         
     # 서버별 설정파일 저장
     import json
@@ -91,7 +94,7 @@ def save_datas():
             server_config_file.close()
         except Exception as e:
             print('[save_datas] > 오류가 발생했습니다!')
-            print(f'[save_datas] > {e.with_traceback()}')
+            print(f'[save_datas] > {e}')
 
 
 
