@@ -1,0 +1,15 @@
+{
+  "guild_id": 0,
+  "guild_name": "라피스 작업실",
+  "bot_notice_ch_id": 628430272177897484,
+  "role_setting_msg_id": 0,
+  "roles_dict": {
+  "game": {
+  },
+  "features": {
+    "key": "Secret",
+    "spotify": "Spotify",
+    "mention": "Mention"
+  }
+  }
+}
