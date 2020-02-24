@@ -52,6 +52,14 @@ def init():
     path = "./server_setting"     # 현재 디렉토리
     config_file_list = [file for file in os.listdir(path) if file.endswith(".json")]
     print(f'[init] > server_config_list: {config_file_list}')
+
+    try:
+        setting_dir = open(file='./server_setting/', mode='rt', encoding='UTF8')
+        setting_dir.close()
+    except FileNotFoundError:
+        setting_dir = open(file='./server_setting/', mode='wt', encoding='UTF8')
+        setting_dir.close()
+
     for file in config_file_list:
         try:
             import json
