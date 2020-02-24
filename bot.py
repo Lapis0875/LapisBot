@@ -48,24 +48,10 @@ def init():
     """
     import os # 폴더 내 파일 불러오기 위해 os 모듈 임포트
 
-    print('[init] > 서버별 설정파일 경로가 존재하는지 확인합니다.')
-    try:
-        setting_dir = open(file='./server_setting', mode='rt', encoding='UTF8')
-        setting_dir.close()
-    except FileNotFoundError:
-        print('[init] > 서버별 설정파일 경로가 존재하지 않습니다. 경로를 생성합니다.')
-        setting_dir = open(file='./server_setting', mode='wt', encoding='UTF8')
-        setting_dir.close()
-    else:
-        print('[init] > 서버별 설정파일 경로가 존재합니다.')
-
-
     print('[init] > 서버별 설정파일을 불러옵니다.')
     path = "./server_setting/"     # 현재 디렉토리
     config_file_list = [file for file in os.listdir(path) if file.endswith(".json")]
     print(f'[init] > server_config_list: {config_file_list}')
-
-
 
     for file in config_file_list:
         try:
