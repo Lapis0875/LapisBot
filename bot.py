@@ -154,6 +154,10 @@ async def on_ready():
         # payload에서 필요한 정보를 저장한다.
         msg_id: int = payload.message_id    # 반응 추가 이벤트가 발생한 메세지 id
         guild_id: int = payload.guild_id    # 반응 추가 이벤트가 발생한 길드 id
+        user_id: int = payload.user_id    # 반응 추가 이벤트를 발생시킨 유저 id
+
+        guild = find(lambda g: g.id == guild_id, bot.guilds)        # 반응 추가 이벤트가 발생한 길드
+        role_setting_msg_id = server_config_dict[guild.name]['role_setting_msg_id'] # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
 
         # 서버별로 roles_dict 내부 카테고리가 다를것을 상정하고, 루프를 돌며 이모지 명칭을 찾는다.
         emoji_name: str = payload.emoji.name
@@ -162,17 +166,12 @@ async def on_ready():
         # 자동 역할설정 기능 관련 변수들
         role_setting_msg_id: int = 0  # 이 이벤트가 발생한 길드의 역할 설정 메세지 id를 저장한다.
 
-        print(f'[bot_event] (on_raw_reaction_add) > {payload.user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에 {payload.emoji.name} 반응을 남겼습니다.')
+        print(f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 제거했습니다.')
 
-        # 역할설정 메세지에서 일어난 이벤트인지 확인하기 위해 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id를 확인한다.
-        for server_config in server_config_dict.items():
-            if server_config['guild_id'] == guild_id:
-                role_setting_msg_id = server_config['role_setting_msg_id']
-                break
 
         if msg_id == role_setting_msg_id:
-            print(f'[bot_event] (on_raw_reaction_add) > {payload.user_id} 님이 역할을 신청했습니다.')
-            guild = find(lambda g: g.id == guild_id, bot.guilds)
+            print(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 역할을 신청했습니다.')
+
             roles_dict = server_config_dict[guild.name]['roles_dict']
             for category in roles_dict.keys():
                 for role_emoji_name in roles_dict[category].keys():
@@ -180,9 +179,9 @@ async def on_ready():
                         selected_emoji_category = category
                         break
 
-            role = get(guild.roles, name=server_config_dict[guild.name]['roles_dict'][selected_emoji_category][payload.emoji.name])
+            role = get(guild.roles, name=server_config_dict[guild.name]['roles_dict'][selected_emoji_category][emoji_name])
             if role is not None:
-                member = find(lambda m: m.id == payload.user_id, guild.members)
+                member: discord.Member = find(lambda m: m.id == user_id, guild.members)
                 if member is not None:
                     await member.add_roles(role, reason='Auto role assignment using bot.', atomic=True)
                 else:
@@ -190,7 +189,7 @@ async def on_ready():
             else:
                 print('[bot_event] (on_raw_reaction_add) > role not found')
         else:
-            print(f'[bot_event] (on_raw_reaction_add) > {payload.emoji.name} is used at {msg_id}')
+            print(f'[bot_event] (on_raw_reaction_add) > {emoji_name} is used at {msg_id}')
 
     '''
     on_raw_reaction_remove(payload):
@@ -210,6 +209,10 @@ async def on_ready():
         # payload에서 필요한 정보를 저장한다.
         msg_id: int = payload.message_id  # 반응 추가 이벤트가 발생한 메세지 id
         guild_id: int = payload.guild_id  # 반응 추가 이벤트가 발생한 길드 id
+        user_id: int = payload.user_id    # 반응 추가 이벤트를 발생시킨 유저 id
+
+        guild = find(lambda g: g.id == guild_id, bot.guilds)        # 반응 추가 이벤트가 발생한 길드
+        role_setting_msg_id = server_config_dict[guild.name]['role_setting_msg_id'] # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
 
         # 서버별로 roles_dict 내부 카테고리가 다를것을 상정하고, 루프를 돌며 이모지 명칭을 찾는다.
         emoji_name: str = payload.emoji.name
@@ -218,35 +221,39 @@ async def on_ready():
         # 자동 역할설정 기능 관련 변수들
         role_setting_msg_id: int = 0  # 이 이벤트가 발생한 길드의 역할 설정 메세지 id를 저장한다.
 
-        print(f'[bot_event] (on_raw_reaction_remove) > {payload.user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {payload.emoji.name} 반응을 제거했습니다.')
+        print(f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 제거했습니다.')
 
         # 역할설정 메세지에서 일어난 이벤트인지 확인하기 위해 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id를 확인한다.
+        # server_config_dict 에 저장된 각 서버별 dictionary를 server_config에 순차적으로 저장
         for server_config in server_config_dict.items():
+            # server_config의 guild_id 키에 대한 값이 payload.guild_id와 같다면, 해당 길드에서 일어난 이벤트임을 확인하고 해당 길드의 역할설정 메세지 id를 가져온다.
             if server_config['guild_id'] == guild_id:
                 role_setting_msg_id = server_config['role_setting_msg_id']
                 break
 
         # 역할설정 메세지에서 일어난 이벤트라면
         if msg_id == role_setting_msg_id:
-            print(f'[bot_event] (on_raw_reaction_remove) > {payload.user_id} 님이 역할을 제거했습니다.')
-            guild = find(lambda g: g.id == guild_id, bot.guilds)
+            print(f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 역할을 제거했습니다.')
+
             roles_dict = server_config_dict[guild.name]['roles_dict']
             for category in roles_dict.keys():
                 for role_emoji_name in roles_dict[category].keys():
                     if role_emoji_name == emoji_name:
                         selected_emoji_category = category
                         break
+
             role = get(guild.roles, name=server_config_dict[guild.name]['roles_dict'][selected_emoji_category][payload.emoji.name])
+
             if role is not None:
-                member = find(lambda m: m.id == payload.user_id, guild.members)
+                member: discord.Member = find(lambda m: m.id == user_id, guild.members)
                 if member is not None:
                     await member.remove_roles(role, reason='Auto role assignment using bot.', atomic=True)
                 else:
-                    print('[bot_event] (on_raw_reaction_remove) > member not found')
+                    print('[bot_event] (on_raw_reaction_add) > member not found')
             else:
-                print('[bot_event] (on_raw_reaction_remove) > role not found')
+                print('[bot_event] (on_raw_reaction_add) > role not found')
         else:
-            print(f'[bot_event] (on_raw_reaction_remove) > {payload.emoji.name} is used at {msg_id}')
+            print(f'[bot_event] (on_raw_reaction_add) > {emoji_name} is used at {msg_id}')
 
     '''
     on_message(message):
@@ -278,24 +285,26 @@ async def on_ready():
 
     @commands.is_owner()
     @setting.command(name="역할지급 설정")
-    async def set_role_test(ctx: discord.ext.commands.Context):
+    async def autorole(ctx: discord.ext.commands.Context):
         global server_config_dict
-        guild = ctx.guild
-        print(f'[역할설정 기능] {ctx.author} 님이 {ctx.message.channel}에서 {ctx.prefix}{ctx.command} 을(를) 사용했습니다.')
-        await ctx.send('현재 사용 가능한 역할들입니다!')
-        # role_setting_msg_id = msg.id
-        content = '**게임 역할**\n'
-        msg = await ctx.send(content)
-        for emoji in roles_dict['game'].keys():
-            content += f'<:{emojis[emoji].name}:{emojis[emoji].id}> : {roles_dict[emoji]}\n'
-            print(f'content = {content}')
-            await msg.edit(content=content, supress=False)
-            await msg.add_reaction(emojis[emoji])
-        msg.edit('**기능**')
-        for emoji in roles_dict['features'].keys():
-            await msg.add_reaction(emojis[emoji])
+        guild: discord.Guild = ctx.guild
+        print(f'[역할설정 기능] {ctx.author} 님이 {guild} 서버의 {ctx.message.channel} 채널에서 {ctx.prefix}{ctx.command} 을(를) 사용했습니다.')
+
+        content: str = '역할 자동부여 메세지 : '
+        msg = await ctx.send(content=content)
+
+        for category in server_config_dict[guild.name]['roles_dict'].items:
+            content += f'**{category}**\n'
+            await msg.edit(content=content)
+            for emoji in category.keys():
+                content += f'<:{emojis[emoji].name}:{emojis[emoji].id}> : {category[emoji]}\n'
+                await msg.edit(content=content, supress=False)
+                await msg.add_reaction(emojis[emoji])
+
         print('채널 설정 완료. 생성된 메세지의 id를 저장합니다.')
+        server_config_dict[guild.name]['role_setting_msg_id'] = msg.id
 
 init()
 print(f'token = {token}')
 bot.run(token)
+save_datas()
