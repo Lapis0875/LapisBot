@@ -28,7 +28,6 @@ def init():
         bot_config_file = open(mode='rt', file='config.txt', encoding='UTF8')
     except FileNotFoundError:
         print('[init] > config.txt 가 존재하지 않습니다! 설정이 필요합니다.')
-        bot_config_file.close()
         token = input('[init] > discord application의 bot token을 입력해 주세요! : ')
         # mode = x(create a new file as writing mode)t(text mode)
         bot_config_file = open(mode='xt', file='config.txt', encoding='UTF8')
@@ -62,11 +61,9 @@ def init():
         except FileNotFoundError as e:
             print('[init] > 파일을 열지 못했습니다!')
             print(f'[init] > {e.with_traceback()}')
-            server_config_file.close()
         except Exception as e:
             print('[init] > 오류가 발생했습니다!')
             print(f'[init] > {e.with_traceback()}')
-            server_config_file.close()
             
         print(f'server_config_dict = {server_config_dict}')
 
@@ -83,7 +80,6 @@ def save_datas():
     except Exception as e:
         print('[save_datas] > 오류가 발생했습니다!')
         print(f'[save_datas] > {e.with_traceback()}')
-        bot_config_file.close()
         
     # 서버별 설정파일 저장
     import json
@@ -96,7 +92,6 @@ def save_datas():
         except Exception as e:
             print('[save_datas] > 오류가 발생했습니다!')
             print(f'[save_datas] > {e.with_traceback()}')
-            server_config_file.close()
 
 
 
