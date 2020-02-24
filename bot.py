@@ -50,11 +50,11 @@ def init():
 
     print('[init] > 서버별 설정파일 경로가 존재하는지 확인합니다.')
     try:
-        setting_dir = open(file='./server_setting/', mode='rt', encoding='UTF8')
+        setting_dir = open(file='./server_setting', mode='rt', encoding='UTF8')
         setting_dir.close()
     except FileNotFoundError:
         print('[init] > 서버별 설정파일 경로가 존재하지 않습니다. 경로를 생성합니다.')
-        setting_dir = open(file='./server_setting/', mode='wt', encoding='UTF8')
+        setting_dir = open(file='./server_setting', mode='wt', encoding='UTF8')
         setting_dir.close()
     else:
         print('[init] > 서버별 설정파일 경로가 존재합니다.')
