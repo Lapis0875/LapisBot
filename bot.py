@@ -61,7 +61,7 @@ def init():
 
 
     print('[init] > 서버별 설정파일을 불러옵니다.')
-    path = "./server_setting"     # 현재 디렉토리
+    path = "./server_setting/"     # 현재 디렉토리
     config_file_list = [file for file in os.listdir(path) if file.endswith(".json")]
     print(f'[init] > server_config_list: {config_file_list}')
 
