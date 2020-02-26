@@ -3,10 +3,11 @@
 import logging
 import os
 import sys
+import traceback
 
 import discord
 from discord.ext import commands
-from discord.utils import get, find # 역할 지급시 해당하는 역할을 찾기 위해 사용
+from discord.utils import get, find  # 역할 지급시 해당하는 역할을 찾기 위해 사용
 
 # 로깅 설정
 logging.getLogger("discord.gateway").setLevel(logging.WARNING)
@@ -21,9 +22,16 @@ token: str = ''
 desc = '서버 관리 기능을 제공하는 디스코드 봇입니다.'
 bot = commands.Bot(command_prefix='라피스봇 ', description=desc)
 
+do_reboot: bool = False  # 봇 재시작 명령어 체크용 flag
+
+# 라피스 개발서버 관련 변수들
+official_management_servername: str = '라피스 작업실'
+
 # 역할 설정 관련 변수들
 server_config_dict: dict = {}
 emojis: dict = {}
+
+
 # server_config_dict 은 "bot_notice_channel": (id), "roles_dict"을 포함합니다.
 
 
@@ -62,11 +70,13 @@ def init():
     """
 
     print('[init] > 서버별 설정파일을 불러옵니다.')
-    path = "./server_setting/"     # 현재 디렉토리
+    path = "./server_setting"  # 현재 디렉토리
     config_file_list = [file for file in os.listdir(path) if file.endswith(".json")]
     print(f'[init] > server_config_list: {config_file_list}')
 
     for file in config_file_list:
+        if file == 'sample_config.json':  # 설정파일 작성법을 안내하기 위해 만들어진 초기 설정파일은 불러오지 않습니다.
+            continue
         print(f'[init] > [{file.replace("_config.json", "")}] 서버의 설정파일을 불러옵니다.')
         try:
             import json
@@ -78,14 +88,14 @@ def init():
             print(f'[init] > Exception Type : {type(e)}')
             print(f'[init] > Exception Value : {e}')
             print('[init] > 파일을 열지 못했습니다! 파일을 새로 생성합니다.')
-            server_config_file = open(file=f'./server_setting/{file}', mode='wt', encoding='utf-8')
+            server_config_file = open(file=f'server_setting/{file}', mode='wt', encoding='utf-8')
             server_config_file.write('{}')
             server_config_dict[file.replace('_config.json', '')] = {}
         except Exception as e:
             print('[init] > 오류가 발생했습니다!')
             print(f'[init] > Exception Type : {type(e)}')
             print(f'[init] > Exception Value : {e}')
-            
+
     print(f'server_config_dict = {server_config_dict}')
 
 
@@ -95,28 +105,36 @@ def save_datas():
     # 봇 설정파일 저장
     print('[save_datas] > config.txt를 저장합니다...')
     try:
-        bot_config_file = open(mode='wt', file='config.txt', encoding='utf-8')
-        bot_config_file.write(f'token={str(token)}')
-        bot_config_file.close()
+        with open(mode='wt', file='config.txt', encoding='utf-8') as bot_config_file:
+            print(f'token={token}')
+            print(f'bot_config_file = {bot_config_file}')
+            bot_config_file.write(f'token={token}')
     except Exception as e:
         print('[save_datas] > 오류가 발생했습니다!')
-        print(f'[save_datas] > Exception Type : {type(e)}')
-        print(f'[save_datas] > Exception Value : {e}')
-    print('[save_datas] > config.txt를 저장했습니다!')
-        
+        traceback.print_exception(etype=type(e), value=e, tb=e.__traceback__)
+        return '**config.txt** 파일을 저장하는데 실패했습니다!', e
+    else:
+        print('[save_datas] > config.txt를 저장했습니다!')
+
     # 서버별 설정파일 저장
     print('[save_datas] > 서버별 설정파일을 저장합니다...')
     import json
     for server_config in server_config_dict.values():
         print(f'[save_datas] > server_config = {server_config}')
         try:
-            server_config_file = open(file=f'./server_setting/{server_config["guild_name"]}_config.json', mode='wt', encoding='utf-8')
-            server_config_file.write(json.dumps(obj=server_config, indent=4))
-            server_config_file.close()
+            with open(file=f'server_setting/{server_config["guild_name"]}_config.json',
+                      mode='wt',
+                      encoding='utf-8') as server_config_file:
+                print(f'server_config_file = {server_config_file}')
+                server_config_file.write(json.dumps(obj=server_config, indent=4, ensure_ascii=False))
         except Exception as e:
-            print('[save_datas] > 오류가 발생했습니다!')
-            print(f'[save_datas] > Exception Type : {type(e)}')
-            print(f'[save_datas] > Exception Value : {e}')
+            print('[save_datas] > 오류가 발생했습니다 :(')
+            traceback.print_exception(etype=type(e), value=e, tb=e.__traceback__)
+            return f'**{server_config["guild_name"]}** 서버의 설정파일을 저장하는데 실패했습니다!', e
+        else:
+            print(f'[save_datas] > {server_config["guild_name"]} 서버의 설정파일을 저장하는데 성공했습니다!')
+
+    return '설정 저장에 성공했습니다!', None
 
 
 @bot.event
@@ -142,8 +160,11 @@ async def on_ready():
     for guild in bot.guilds:
         logger.debug(f'{guild.name} 서버의 컨피그 존재여부를 확인합니다...')
         if guild.name in server_config_dict.keys():
-            logger.debug(f'{guild.name} 서버는 config가 존재합니다! 봇 온라인 메세지를 전송합니다.')
-            await bot.get_channel(server_config_dict[guild.name]['bot_notice_ch_id']).send("라피스봇 온라인! :sunny:")
+            userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['onofflog_ch_id']
+            if userlog_ch_id != 0:
+                logger.debug(f'{guild.name} 서버는 config가 존재합니다! 봇 온라인 메세지를 전송합니다.')
+                await bot.get_channel(userlog_ch_id).send("라피스봇 온라인! :sunny:")
+    logger.info('소속된 서버들에 봇 온라인 메세지를 전송했습니다!')
 
     '''
     on_raw_reaction_add(payload):
@@ -163,7 +184,14 @@ async def on_ready():
         logger.info(f'봇이 {guild.name} 서버에 참여했습니다! 서버 설정 파일을 생성합니다...')
         with open(f'./server_setting/{guild.name}_config.json', 'xt', encoding='utf-8') as config_file:
             global server_config_dict
-            config_dict = {'guild_name': guild.name, 'bot_notice_ch_id': 0, 'role_setting_msg_ids': [], 'roles_dict': {}}
+            config_dict = {'guild_name': guild.name,
+                           'notice_ch_id': {
+                               'notice_ch_id': 0,
+                               'userlog_ch_id': 0,
+                               'onofflog_ch_id': 0
+                           },
+                           'role_setting_msg_ids': [0],
+                           'roles_dict': {}}
             server_config_dict[guild.name] = config_dict
 
     @bot.event
@@ -184,31 +212,37 @@ async def on_ready():
     async def on_member_join(member: discord.Member):
         logger.info(f'{member} has joined to the server {member.guild.name}')
         guild: discord.Guild = member.guild
-        await bot.get_channel(server_config_dict[guild.name]['bot_notice_ch_id']).send(f'{member} 님 안녕하세요!')
+        userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['userlog_ch_id']
+        if userlog_ch_id != 0:
+            await bot.get_channel(userlog_ch_id).send(f'{member} 님 안녕하세요!')
 
     @bot.event
     async def on_member_remove(member: discord.Member):
 
         logger.info(f'{member} has left the server {member.guild.name}')
         guild: discord.Guild = member.guild
-        await bot.get_channel(server_config_dict[guild.name]['bot_notice_ch_id']).send(f'{member} 님 안녕히가세요...')
+        userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['userlog_ch_id']
+        if userlog_ch_id != 0:
+            await bot.get_channel(userlog_ch_id).send(f'{member} 님 안녕하세요!')
 
     @bot.event
     async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         # payload에서 필요한 정보를 저장한다.
-        msg_id: int = payload.message_id    # 반응 추가 이벤트가 발생한 메세지 id
-        guild_id: int = payload.guild_id    # 반응 추가 이벤트가 발생한 길드 id
-        user_id: int = payload.user_id    # 반응 추가 이벤트를 발생시킨 유저 id
+        msg_id: int = payload.message_id  # 반응 추가 이벤트가 발생한 메세지 id
+        guild_id: int = payload.guild_id  # 반응 추가 이벤트가 발생한 길드 id
+        user_id: int = payload.user_id  # 반응 추가 이벤트를 발생시킨 유저 id
 
-        guild: discord.Guild = find(lambda g: g.id == guild_id, bot.guilds)        # 반응 추가 이벤트가 발생한 길드
+        guild: discord.Guild = find(lambda g: g.id == guild_id, bot.guilds)  # 반응 추가 이벤트가 발생한 길드
         logger.debug(f'[bot_event] (on_raw_reaction_add) > guild.name = {guild.name}')
-        role_setting_msg_ids: list = server_config_dict[guild.name]['role_setting_msg_ids'] # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
+        role_setting_msg_ids: list = server_config_dict[guild.name][
+            'role_setting_msg_ids']  # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
 
         # 서버별로 roles_dict 내부 카테고리가 다를것을 상정하고, 루프를 돌며 이모지 명칭을 찾는다.
         emoji_name: str = payload.emoji.name
-        selected_emoji_category: str = ''   # roles_dict의 카테고리 분류 저장
+        selected_emoji_category: str = ''  # roles_dict의 카테고리 분류 저장
 
-        logger.info(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 추가했습니다.')
+        logger.info(
+            f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 추가했습니다.')
 
         if msg_id in role_setting_msg_ids:
             logger.info(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 역할을 신청했습니다.')
@@ -254,16 +288,18 @@ async def on_ready():
         # payload에서 필요한 정보를 저장한다.
         msg_id: int = payload.message_id  # 반응 추가 이벤트가 발생한 메세지 id
         guild_id: int = payload.guild_id  # 반응 추가 이벤트가 발생한 길드 id
-        user_id: int = payload.user_id    # 반응 추가 이벤트를 발생시킨 유저 id
+        user_id: int = payload.user_id  # 반응 추가 이벤트를 발생시킨 유저 id
 
-        guild = find(lambda g: g.id == guild_id, bot.guilds)        # 반응 추가 이벤트가 발생한 길드
-        role_setting_msg_ids: list = server_config_dict[guild.name]['role_setting_msg_ids'] # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
+        guild = find(lambda g: g.id == guild_id, bot.guilds)  # 반응 추가 이벤트가 발생한 길드
+        role_setting_msg_ids: list = server_config_dict[guild.name][
+            'role_setting_msg_ids']  # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
 
         # 서버별로 roles_dict 내부 카테고리가 다를것을 상정하고, 루프를 돌며 이모지 명칭을 찾는다.
         emoji_name: str = payload.emoji.name
         selected_emoji_category: str = ''  # roles_dict의 카테고리 분류 저장
 
-        logger.info(f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 제거했습니다.')
+        logger.info(
+            f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 제거했습니다.')
 
         # 역할설정 메세지에서 일어난 이벤트라면
         if msg_id in role_setting_msg_ids:
@@ -308,53 +344,76 @@ async def on_ready():
 
     @bot.event
     async def on_command_error(ctx: discord.ext.commands.Context, e: discord.ext.commands.CommandError):
-        logger.error(f'[bot-event] (on_command_error) > {e}')
+        logger.error(f'[bot-event] (on_command_error) > message : {ctx.message}')
+        logger.error(f'[bot-event] (on_command_error) > error : {e}')
         if isinstance(e, commands.errors.CheckFailure):
             return
 
     @commands.is_owner()
-    @bot.group(name="설정")
-    async def setting(ctx: discord.ext.commands.Context):
-        pass
+    @bot.group(name="관리")
+    async def manage(ctx: discord.ext.commands.Context):
+        logger.info(f'{ctx.author} 유저가 {ctx.message.content} 명령어를 사용했습니다.')
+        if ctx.message.content.replace(f'{bot.command_prefix}설정', '') == '':
+            await ctx.send('현재 다음과 같은 명령어들이 있어요!\n\n' +
+                           '**종료** :개발자 전용 명령어로, 봇을 종료시킵니다.\n' +
+                           '**재시작**: 개발자 전용 명령어로, 봇을 재시작시킵니다. (WIP)\n' +
+                           '**공지하기** : 개발자 전용 명령어로, 봇이 접속해있는 서버의 봇 공지사항 채널에 공지사항을 전송합니다.\n' +
+                           '**설정저장** : 개발자 전용 명령어로, 현재 봇이 불러온 설정을 각 서버의 설정 파일로 저장합니다.\n' +
+                           '**자동역할** : 관리자 전용 명령어로, 명령어를 사용한 채널에 자동역할 메세지를 생성하고 해당 메세지에 반응을 추가하고 제거하는 방식으로 역할 부여를 자동화합니다.\n' +
+                           '**설정보기** : 관리자 전용 명령어로, 명령어를 사용한 서버의 불러와진 설정(json)을 코드 하이라이팅을 입혀 채팅으로 보여줍니다.')
+        else:
+            pass
 
     @commands.is_owner()
-    @setting.command(name="종료")
+    @manage.command(name="종료")
     async def stop(ctx: discord.ext.commands.Context):
+        global do_reboot
         logger.info(f'{ctx.author} 님이 봇을 종료시켰습니다.')
         await ctx.send('봇을 종료합니다...')
-        await bot.get_channel(server_config_dict[ctx.guild.name]['bot_notice_ch_id']).send("라피스봇 오프라인...  :full_moon:")
-        await bot.logout()
-        await bot.login(token=token)
+        do_reboot = False
+        for guild in bot.guilds:
+            if guild.name in server_config_dict.keys():
+                bot_onofflog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['onofflog_ch_id']
+                if bot_onofflog_ch_id != 0:
+                    await bot.get_channel(bot_onofflog_ch_id).send("라피스봇 오프라인...  :full_moon:")
+        await bot.close()
 
-    """
     @commands.is_owner()
-    @setting.command(name="재시작")
+    @manage.command(name="재시작")
     async def restart(ctx: discord.ext.commands.Context):
+        global do_reboot
         logger.info(f'{ctx.author} 님이 봇을 재시작시켰습니다.')
         await ctx.send('봇을 재시작합니다...')
-        await bot.get_channel(server_config_dict[ctx.guild.name]['bot_notice_ch_id']).send("라피스봇 오프라인...  :full_moon:")
-        await bot.logout()
-        await os.execv(sys.executable, ['python'] + sys.argv)
-    """
+        do_reboot = True
+        for guild in bot.guilds:
+            if guild.name in server_config_dict.keys():
+                bot_onofflog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['onofflog_ch_id']
+                if bot_onofflog_ch_id != 0:
+                    await bot.get_channel(bot_onofflog_ch_id).send("라피스봇 오프라인...  :full_moon:")
+        await bot.close()
 
     @commands.is_owner()
-    @setting.command(name="자동역할")
+    @manage.command(name="자동역할")
     async def autorole(ctx: discord.ext.commands.Context):
         logger.info(f'{ctx.author}가 역할 자동 지급 명령어를 사용했습니다.')
         global server_config_dict
         guild: discord.Guild = ctx.guild
-        logger.info(f'[역할설정 기능] {ctx.author} 님이 {guild} 서버의 {ctx.message.channel} 채널에서 {ctx.prefix}{ctx.command} 을(를) 사용했습니다.')
+        logger.info(
+            f'[역할설정 기능] {ctx.author} 님이 {guild} 서버의 {ctx.message.channel} 채널에서 {ctx.prefix}{ctx.command} 을(를) 사용했습니다.')
 
         await ctx.send(content='역할 자동부여 메세지 :')
         role_setting_msg_ids: list = []
         try:
-            logger.debug(f"server_config_dict[guild.name]['roles_dict'].keys() = {server_config_dict[guild.name]['roles_dict'].keys()}")
+            logger.debug(
+                f'server_config_dict[guild.name]["roles_dict"].keys() = {server_config_dict[guild.name]["roles_dict"].keys()}')
             for category in server_config_dict[guild.name]['roles_dict'].keys():
                 content = f'**{category}**\n'
                 msg = await ctx.send(content=content)
-                logger.debug(f"server_config_dict[guild.name]['roles_dict'][{category}].keys() = {server_config_dict[guild.name]['roles_dict'][category].keys()}")
+                logger.debug(
+                    f"server_config_dict[guild.name]['roles_dict'][{category}].keys() = {server_config_dict[guild.name]['roles_dict'][category].keys()}")
                 for emoji in server_config_dict[guild.name]['roles_dict'][category].keys():
-                    content.join(f"<:{emoji}:{emojis[emoji].id}> : {server_config_dict[guild.name]['roles_dict'][category][emoji]}\n")
+                    content.join(
+                        f"<:{emoji}:{emojis[emoji].id}> : {server_config_dict[guild.name]['roles_dict'][category][emoji]}\n")
                     await msg.edit(content=content, supress=False)
                     await msg.add_reaction(emojis[emoji])
                 role_setting_msg_ids.append(msg.id)
@@ -368,23 +427,51 @@ async def on_ready():
         server_config_dict[guild.name]['role_setting_msg_ids'] = role_setting_msg_ids
 
     @commands.is_owner()
-    @setting.command(name="설정저장")
+    @manage.command(name="설정저장")
     async def savedata(ctx: discord.ext.commands.Context):
         logger.info(f'{ctx.author}가 설정 저장 명령어를 사용했습니다.')
         await ctx.send('설정 파일들을 저장합니다...')
-        save_datas()
-        await ctx.send('설정 파일들을 저장했습니다!')
+        result, error = save_datas()
+        await ctx.send(f'설정파일 저장 시도후 다음 결과를 얻었습니다 : {result}')
+        if error is not None:
+            await ctx.send(f'다음과 같은 오류가 발생했습니다! :\n```css\n{error.with_traceback(error.__traceback__)}\n```')
 
     @commands.is_owner()
-    @setting.command(name="설정보기")
+    @manage.command(name="설정보기")
     async def showconfig(ctx: discord.ext.commands.Context):
         logger.info(f'{ctx.author}가 설정 보기 명령어를 사용했습니다.')
         import json
         await ctx.send('이 서버의 설정 파일을 보여드릴게요!')
-        config_str = json.dumps(obj=server_config_dict[ctx.guild.name], indent=4)
+        config_str = json.dumps(obj=server_config_dict[ctx.guild.name], indent=4, ensure_ascii=False)
         await ctx.send(f'```json\n{config_str}\n```')
+
+    @commands.is_owner()
+    @manage.command(name="공지하기")
+    async def sendnotice(ctx: discord.ext.commands.Context):
+        logger.info(f'{ctx.author}가 공지하기 명령어를 사용했습니다.')
+        if ctx.guild.name == official_management_servername:
+            await ctx.send('소속된 서버에 해당 공지사항을 전송합니다!')
+            for guild in bot.guilds:
+                if guild.name in server_config_dict.keys():
+                    notice_ch_id = server_config_dict[guild.name]['bot_ch_ids']['notice_ch_id']
+                    if notice_ch_id != 0:
+                        await bot.get_channel(notice_ch_id).send(f'봇 공지사항이 전달되었습니다!\n{ctx.message.author} : ' +
+                                                                 f'{ctx.message.content.replace(f"{bot.command_prefix}설정 공지하기", "")}')
+        else:
+            await ctx.send(f'라피스봇 공식 서버인 {official_management_servername} 서버에서만 사용 가능한 명령어입니다!')
+
 
 init()
 print(f'token = {token}')
 bot.run(token)
-save_datas()
+result, error = save_datas()
+print(f'save_datas() 실행결과 : {result}')
+if error is not None:
+    print(f'save_datas() 실행결과 발생한 오류 : {error.with_traceback(error.__traceback__)}')
+
+if bot.is_closed() and do_reboot:
+    print('[bot.py] > 봇 재시작 명령이 들어와 봇을 재시작합니다 :')
+    excutable = sys.executable
+    args = sys.argv[:]
+    args.insert(0, excutable)
+    os.execv(sys.executable, args)
