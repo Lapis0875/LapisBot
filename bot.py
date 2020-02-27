@@ -127,7 +127,7 @@ def save_datas():
                       mode='wt',
                       encoding='utf-8') as server_config_file:
                 print(f'server_config_file = {server_config_file}')
-                server_config_file.write(json.dumps(obj=server_config, indent=4, ensure_ascii=False))
+                json.dump(obj=server_config, fp=server_config_file, indent=4, ensure_ascii=False)
         except Exception as e:
             print('[save_datas] > 오류가 발생했습니다 :(')
             traceback.print_exception(etype=type(e), value=e, tb=e.__traceback__)
@@ -167,26 +167,14 @@ async def on_ready():
                 await bot.get_channel(userlog_ch_id).send("라피스봇 온라인! :sunny:")
     logger.info('소속된 서버들에 봇 온라인 메세지를 전송했습니다!')
 
-    '''
-    on_raw_reaction_add(payload):
-        ...
-
-    봇에 캐싱되지 않은 메세지에 반응이 추가되었을 때 실행되는 이벤트입니다.
-    paylod는 discord.RawReactionActionEvent class로, 자세한 설명은
-
-    on_raw_reaction_add() 이벤트 설명 : https://discordpy.readthedocs.io/en/latest/api.html#event-reference
-    payload 설명 : https://discordpy.readthedocs.io/en/latest/api.html#discord.RawReactionActionEvent
-
-    에서 확인하실 수 있습니다.
-    '''
-
     @bot.event
     async def on_guild_join(guild: discord.Guild):
         logger.info(f'봇이 {guild.name} 서버에 참여했습니다! 서버 설정 파일을 생성합니다...')
         with open(f'./server_setting/{guild.name}_config.json', 'xt', encoding='utf-8') as config_file:
             global server_config_dict
+            import json
             config_dict = {'guild_name': guild.name,
-                           'notice_ch_id': {
+                           'bot_ch_ids': {
                                'notice_ch_id': 0,
                                'userlog_ch_id': 0,
                                'onofflog_ch_id': 0
@@ -194,6 +182,7 @@ async def on_ready():
                            'role_setting_msg_ids': [0],
                            'roles_dict': {}}
             server_config_dict[guild.name] = config_dict
+            json.dump(obj=config_dict, fp=config_file, indent=4, ensure_ascii=False)
 
     @bot.event
     async def on_guild_remove(guild: discord.Guild):
@@ -225,6 +214,19 @@ async def on_ready():
         userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['userlog_ch_id']
         if userlog_ch_id != 0:
             await bot.get_channel(userlog_ch_id).send(f'{member} 님 안녕하세요!')
+
+    '''
+        on_raw_reaction_add(payload):
+            ...
+
+        봇에 캐싱되지 않은 메세지에 반응이 추가되었을 때 실행되는 이벤트입니다.
+        paylod는 discord.RawReactionActionEvent class로, 자세한 설명은
+
+        on_raw_reaction_add() 이벤트 설명 : https://discordpy.readthedocs.io/en/latest/api.html#event-reference
+        payload 설명 : https://discordpy.readthedocs.io/en/latest/api.html#discord.RawReactionActionEvent
+
+        에서 확인하실 수 있습니다.
+        '''
 
     @bot.event
     async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
