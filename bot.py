@@ -353,26 +353,25 @@ async def on_ready():
             return
 
     @commands.is_owner()
-    @bot.group(name="관리")
-    async def manage(ctx: discord.ext.commands.Context):
+    @bot.group(name="개발자")
+    async def dev(ctx: discord.ext.commands.Context):
         if ctx.author.id in developer_ids:
             logger.info(f'{ctx.author} 유저가 명령어를 사용했습니다 :\n> {ctx.message.content}')
-            if ctx.message.content.replace(f'{bot.command_prefix}설정', '') == '':
+            if ctx.message.content.replace(f'{bot.command_prefix}개발자', '') == '':
                 await ctx.send('현재 다음과 같은 명령어들이 있어요!\n\n' +
                                '**종료** :개발자 전용 명령어로, 봇을 종료시킵니다.\n' +
                                '**재시작**: 개발자 전용 명령어로, 봇을 재시작시킵니다. (WIP)\n' +
                                '**공지하기** : 개발자 전용 명령어로, 봇이 접속해있는 서버의 봇 공지사항 채널에 공지사항을 전송합니다.\n' +
-                               '**설정저장** : 개발자 전용 명령어로, 현재 봇이 불러온 설정을 각 서버의 설정 파일로 저장합니다.\n' +
-                               '**자동역할** : 관리자 전용 명령어로, 명령어를 사용한 채널에 자동역할 메세지를 생성하고 해당 메세지에 반응을 추가하고 제거하는 방식으로 역할 부여를 자동화합니다.\n' +
-                               '**설정보기** : 관리자 전용 명령어로, 명령어를 사용한 서버의 불러와진 설정(json)을 코드 하이라이팅을 입혀 채팅으로 보여줍니다.')
+                               '**설정저장** : 개발자 전용 명령어로, 현재 봇이 불러온 설정을 각 서버의 설정 파일로 저장합니다.')
             else:
                 pass
         else:
             logger.info(f'{ctx.author}가 관리 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
             await ctx.send('개발자만 사용할 수 있는 기능입니다!')
 
+    @commands.cooldown(rate=600)
     @commands.is_owner()
-    @manage.command(name="종료")
+    @dev.command(name="종료")
     async def stop(ctx: discord.ext.commands.Context):
         global do_reboot
         if ctx.author.id in developer_ids:
@@ -389,8 +388,9 @@ async def on_ready():
             logger.info(f'{ctx.author}가 종료 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
             await ctx.send('개발자만 사용할 수 있는 기능입니다!')
 
+    @commands.cooldown(rate=600)
     @commands.is_owner()
-    @manage.command(name="재시작")
+    @dev.command(name="재시작")
     async def restart(ctx: discord.ext.commands.Context):
         global do_reboot
         if ctx.author.id in developer_ids:
@@ -406,6 +406,53 @@ async def on_ready():
         else:
             logger.info(f'{ctx.author}가 재시작 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
             await ctx.send('개발자만 사용할 수 있는 기능입니다!')
+
+    @commands.cooldown(rate=600)
+    @commands.is_owner()
+    @dev.command(name="공지하기")
+    async def sendnotice(ctx: discord.ext.commands.Context):
+        logger.info(f'{ctx.author}가 공지하기 명령어를 사용했습니다.')
+        if ctx.guild.name == official_management_servername and ctx.author.id in developer_ids:
+            await ctx.send('소속된 서버에 해당 공지사항을 전송합니다!')
+            for guild in bot.guilds:
+                if guild.name in server_config_dict.keys():
+                    notice_ch_id = server_config_dict[guild.name]['bot_ch_ids']['notice_ch_id']
+                    if notice_ch_id != 0:
+                        await bot.get_channel(notice_ch_id).send(f'봇 공지사항이 전달되었습니다! by {ctx.message.author}\n ' +
+                                                                 f'{ctx.message.content.replace(f"{bot.command_prefix}관리 공지하기 ", "")}')
+        else:
+            await ctx.send(f'라피스봇 공식 서버인 {official_management_servername} 서버에서만 사용 가능한 명령어입니다!')
+
+    @commands.cooldown(rate=600)
+    @commands.is_owner()
+    @dev.command(name="설정저장")
+    async def savedata(ctx: discord.ext.commands.Context):
+        if ctx.author.id in developer_ids:
+            logger.info(f'{ctx.author}가 설정 저장 명령어를 사용했습니다.')
+            await ctx.send('설정 파일들을 저장합니다...')
+            result, error = save_datas()
+            await ctx.send(f'설정파일 저장 시도후 다음 결과를 얻었습니다 : {result}')
+            if error is not None:
+                await ctx.send(f'다음과 같은 오류가 발생했습니다! :\n```css\n{error.with_traceback(error.__traceback__)}\n```')
+        else:
+            logger.info(f'{ctx.author}가 설정저장 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
+            await ctx.send('개발자만 사용할 수 있는 기능입니다!')
+
+
+    @commands.has_guild_permissions
+    @bot.group(name="관리")
+    async def manage(ctx: discord.ext.commands.Context):
+        if ctx.author.id in developer_ids:
+            logger.info(f'{ctx.author} 유저가 명령어를 사용했습니다 :\n> {ctx.message.content}')
+            if ctx.message.content.replace(f'{bot.command_prefix}관리', '') == '':
+                await ctx.send('현재 다음과 같은 명령어들이 있어요!\n\n' +
+                               '**자동역할** : 관리자 전용 명령어로, 명령어를 사용한 채널에 자동역할 메세지를 생성하고 해당 메세지에 반응을 추가하고 제거하는 방식으로 역할 부여를 자동화합니다.\n' +
+                               '**설정보기** : 관리자 전용 명령어로, 명령어를 사용한 서버의 불러와진 설정(json)을 코드 하이라이팅을 입혀 채팅으로 보여줍니다.')
+            else:
+                pass
+        else:
+            logger.info(f'{ctx.author}가 관리 명령어를 사용하려 했으나, 서버 관리자가 아니므로 거부당했습니다..')
+            await ctx.send('서버 관리자만 사용할 수 있는 기능입니다!')
 
     @commands.is_owner()
     @manage.command(name="자동역할")
@@ -442,20 +489,6 @@ async def on_ready():
         server_config_dict[guild.name]['role_setting_msg_ids'] = role_setting_msg_ids
 
     @commands.is_owner()
-    @manage.command(name="설정저장")
-    async def savedata(ctx: discord.ext.commands.Context):
-        if ctx.author.id in developer_ids:
-            logger.info(f'{ctx.author}가 설정 저장 명령어를 사용했습니다.')
-            await ctx.send('설정 파일들을 저장합니다...')
-            result, error = save_datas()
-            await ctx.send(f'설정파일 저장 시도후 다음 결과를 얻었습니다 : {result}')
-            if error is not None:
-                await ctx.send(f'다음과 같은 오류가 발생했습니다! :\n```css\n{error.with_traceback(error.__traceback__)}\n```')
-        else:
-            logger.info(f'{ctx.author}가 설정저장 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
-            await ctx.send('개발자만 사용할 수 있는 기능입니다!')
-
-    @commands.is_owner()
     @manage.command(name="설정보기")
     async def showconfig(ctx: discord.ext.commands.Context):
         logger.info(f'{ctx.author}가 설정 보기 명령어를 사용했습니다.')
@@ -464,20 +497,7 @@ async def on_ready():
         config_str = json.dumps(obj=server_config_dict[ctx.guild.name], indent=4, ensure_ascii=False)
         await ctx.send(f'```json\n{config_str}\n```')
 
-    @commands.is_owner()
-    @manage.command(name="공지하기")
-    async def sendnotice(ctx: discord.ext.commands.Context):
-        logger.info(f'{ctx.author}가 공지하기 명령어를 사용했습니다.')
-        if ctx.guild.name == official_management_servername and ctx.author.id in developer_ids:
-            await ctx.send('소속된 서버에 해당 공지사항을 전송합니다!')
-            for guild in bot.guilds:
-                if guild.name in server_config_dict.keys():
-                    notice_ch_id = server_config_dict[guild.name]['bot_ch_ids']['notice_ch_id']
-                    if notice_ch_id != 0:
-                        await bot.get_channel(notice_ch_id).send(f'봇 공지사항이 전달되었습니다! by {ctx.message.author}\n ' +
-                                                                 f'{ctx.message.content.replace(f"{bot.command_prefix}관리 공지하기 ", "")}')
-        else:
-            await ctx.send(f'라피스봇 공식 서버인 {official_management_servername} 서버에서만 사용 가능한 명령어입니다!')
+
 
 
 init()

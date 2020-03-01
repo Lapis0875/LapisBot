@@ -3,3 +3,4 @@
 !/server_setting/sample_config.json
 /venv/
 /.idea/
+/testcodes.py
