@@ -5,9 +5,12 @@
         "userlog_ch_id": 0,
         "onofflog_ch_id": 0
     },
-    "role_setting_msg_ids": [
-        0
-    ],
+    "auth": {
+        "auth_msg_id": 0,
+        "noauth_role_name": "",
+        "auth_role_name": ""
+    },
+    "role_setting_msg_ids": [0],
     "roles_dict": {
         "category1": {
             "emoji1": "role1"
