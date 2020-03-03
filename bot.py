@@ -20,11 +20,12 @@ logger.addHandler(handler)
 # 봇 설정 변수들
 token: str = ''
 desc = '서버 관리 기능을 제공하는 디스코드 봇입니다.'
-bot = commands.Bot(command_prefix='라테봇 ', description=desc)
+bot = commands.Bot(command_prefix='라피스봇 ', description=desc)
 
 do_reboot: bool = False  # 봇 재시작 명령어 체크용 flag
 
-
+# 알람 종료용 변수
+do_waitforsec: bool = False  # 봇 알람 명령어 알람 실행 및 종료용 flag
 
 # 라피스 개발서버 관련 변수들
 official_management_servername: str = '라피스 작업실'
@@ -166,7 +167,7 @@ async def on_ready():
             userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['onofflog_ch_id']
             if userlog_ch_id != 0:
                 logger.debug(f'{guild.name} 서버는 config가 존재합니다! 봇 온라인 메세지를 전송합니다.')
-                await bot.get_channel(userlog_ch_id).send("라테봇 온라인! :sunny:")
+                await bot.get_channel(userlog_ch_id).send("라피스봇 온라인! :sunny:")
     logger.info('소속된 서버들에 봇 온라인 메세지를 전송했습니다!')
 
     @bot.event
@@ -205,7 +206,7 @@ async def on_ready():
         logger.info(f'{member} has joined to the server {member.guild.name}')
         guild: discord.Guild = member.guild
 
-        role = get(guild.roles, name='미등록')
+        role = get(guild.roles, name=server_config_dict[guild.name]['auth']['noauth_role_name'])
         if role is not None:
             await member.add_roles(role)
 
@@ -420,7 +421,39 @@ async def on_ready():
                                                                                '')
             await ctx.send(f'당신은 다음 권한을 가지고 있지 않습니다! : {missing_perm}')
 
+    @bot.command(name='알람')
+    async def setalarm(ctx: discord.ext.commands.Context, h: str = '0', m: str = '0', s: str = '0'):
+        global do_waitforsec
+        author: discord.Member = ctx.author
+        hour = int(h)
+        min = int(m)
+        sec = int(s)
+        logger.debug(f'time = {hour} {min} {sec}')
+        await ctx.send(f'{hour}시간 {min}분 {sec}초 주기로 알람을 설정했습니다.')
+        do_waitforsec = True
+        import asyncio
+        totalsec = hour * 3600 + min * 60 + sec
+        while do_waitforsec:
+            logger.debug(f'[알람] wating sec : {totalsec}')
+            for currentmin in range(0, hour * 60 + min):
+                logger.info(f'[알람] {currentmin}분 지났습니다.')
+                lefttime = (hour * 60 + min) - currentmin
+                logger.debug(f'lefttime = {lefttime}')
+                await bot.change_presence(status=discord.Status.online,
+                                          activity=discord.Game(name=f'알람까지 {lefttime}분 남았습니다', type=1))
+                await asyncio.sleep(60)
 
+            await asyncio.sleep(sec)
+            logger.info(f'[알람] 시간이 다 되었습니다!')
+            await ctx.send(f'{author.mention} 시간이 다 되었습니다!')
+        await bot.change_presence(status=discord.Status.online,
+                                  activity=discord.Game(name='아직 작업중!', type=1))
+
+    @bot.command(name='알람끄기')
+    async def stopalarm(ctx: discord.ext.commands.Context):
+        global do_waitforsec
+        do_waitforsec = False
+        await ctx.send('알람을 종료했습니다!')
 
     @commands.is_owner()
     @bot.group(name="개발자")
