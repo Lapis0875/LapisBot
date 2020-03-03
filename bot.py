@@ -20,9 +20,11 @@ logger.addHandler(handler)
 # 봇 설정 변수들
 token: str = ''
 desc = '서버 관리 기능을 제공하는 디스코드 봇입니다.'
-bot = commands.Bot(command_prefix='라피스봇 ', description=desc)
+bot = commands.Bot(command_prefix='라테봇 ', description=desc)
 
 do_reboot: bool = False  # 봇 재시작 명령어 체크용 flag
+
+
 
 # 라피스 개발서버 관련 변수들
 official_management_servername: str = '라피스 작업실'
@@ -164,7 +166,7 @@ async def on_ready():
             userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['onofflog_ch_id']
             if userlog_ch_id != 0:
                 logger.debug(f'{guild.name} 서버는 config가 존재합니다! 봇 온라인 메세지를 전송합니다.')
-                await bot.get_channel(userlog_ch_id).send("라피스봇 온라인! :sunny:")
+                await bot.get_channel(userlog_ch_id).send("라테봇 온라인! :sunny:")
     logger.info('소속된 서버들에 봇 온라인 메세지를 전송했습니다!')
 
     @bot.event
@@ -202,6 +204,11 @@ async def on_ready():
     async def on_member_join(member: discord.Member):
         logger.info(f'{member} has joined to the server {member.guild.name}')
         guild: discord.Guild = member.guild
+
+        role = get(guild.roles, name='미등록')
+        if role is not None:
+            await member.add_roles(role)
+
         userlog_ch_id = server_config_dict[guild.name]['bot_ch_ids']['userlog_ch_id']
         if userlog_ch_id != 0:
             await bot.get_channel(userlog_ch_id).send(f'{member} 님 안녕하세요!')
@@ -235,30 +242,39 @@ async def on_ready():
         guild_id: int = payload.guild_id  # 반응 추가 이벤트가 발생한 길드 id
         user_id: int = payload.user_id  # 반응 추가 이벤트를 발생시킨 유저 id
 
+        member = payload.member  # 반응 추가 이벤트를 발생시킨 사용자. REACTION_ADD 유형의 이벤트에서만 사용 가능하다.
+
         guild: discord.Guild = find(lambda g: g.id == guild_id, bot.guilds)  # 반응 추가 이벤트가 발생한 길드
         logger.debug(f'[bot_event] (on_raw_reaction_add) > guild.name = {guild.name}')
         role_setting_msg_ids: list = server_config_dict[guild.name][
             'role_setting_msg_ids']  # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
 
+        auth_msg_id: int = server_config_dict[guild.name]['auth']['auth_msg_id']  # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
+        noauth_role_name: str = server_config_dict[guild.name]['auth']['noauth_role_name']
+        auth_role_name: str = server_config_dict[guild.name]['auth']['auth_role_name']
+
         # 서버별로 roles_dict 내부 카테고리가 다를것을 상정하고, 루프를 돌며 이모지 명칭을 찾는다.
-        emoji_name: str = payload.emoji.name
+        emoji: discord.PartialEmoji = payload.emoji
         selected_emoji_category: str = ''  # roles_dict의 카테고리 분류 저장
 
         logger.info(
-            f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 추가했습니다.')
+            f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji} 반응을 추가했습니다.')
 
+        """
+        자동역할 기능 부분
+        """
         if msg_id in role_setting_msg_ids:
             logger.info(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 역할을 신청했습니다.')
 
             roles_dict = server_config_dict[guild.name]['roles_dict']
             for category in roles_dict.keys():
                 for role_emoji_name in roles_dict[category].keys():
-                    if role_emoji_name == emoji_name:
+                    if role_emoji_name == emoji.name:
                         selected_emoji_category = category
                         break
-            logger.debug(f'[bot_event] (on_raw_reaction_add) > selected_emoji_category = {category}')
+            logger.debug(f'[bot_event] (on_raw_reaction_add) > selected_emoji_category = {selected_emoji_category}')
 
-            role_name = server_config_dict[guild.name]['roles_dict'][selected_emoji_category][payload.emoji.name]
+            role_name = server_config_dict[guild.name]['roles_dict'][selected_emoji_category][emoji.name]
             logger.debug(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 신청한 역할 : {role_name}')
             role = get(guild.roles, name=role_name)
 
@@ -271,7 +287,25 @@ async def on_ready():
             else:
                 logger.error('[bot_event] (on_raw_reaction_add) > role not found')
         else:
-            logger.info(f'[bot_event] (on_raw_reaction_add) > {emoji_name} is used at {msg_id}')
+            logger.info(f'[bot_event] (on_raw_reaction_add) > {emoji.name} is used at {msg_id}')
+
+        """
+        사용자 인증 부분
+        """
+        if msg_id == auth_msg_id:
+            logger.info(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 인증 절차를 거쳤습니다.')
+            logger.debug(f'[bot_event] (on_raw_reaction_remove) > 사용된 이모지 : {emoji}, emoji.name = {emoji.name}')
+            if emoji.name == '✅':
+                logger.info(f'[bot_event] (on_raw_reaction_add) > {member.display_name}님이 ✅ 반응을 제거해 인증을 취소했습니다.')
+
+                noauth_role = get(guild.roles, name=noauth_role_name)
+                logger.debug(f'[bot_event] (on_raw_reaction_add) > noauth_role = {noauth_role}')
+                await member.remove_roles(noauth_role)
+                auth_role = get(guild.roles, name=auth_role_name)
+                logger.debug(f'[bot_event] (on_raw_reaction_add) > auth_role = {auth_role}')
+                await member.add_roles(auth_role)
+            else:
+                pass
 
     '''
     on_raw_reaction_remove(payload):
@@ -293,16 +327,22 @@ async def on_ready():
         guild_id: int = payload.guild_id  # 반응 추가 이벤트가 발생한 길드 id
         user_id: int = payload.user_id  # 반응 추가 이벤트를 발생시킨 유저 id
 
-        guild = find(lambda g: g.id == guild_id, bot.guilds)  # 반응 추가 이벤트가 발생한 길드
+        # member = payload.member  # 반응 추가 이벤트를 발생시킨 사용자. REACTION_ADD 유형의 이벤트에서만 사용 가능하다. --> REACTION_REMOVE 유형의 이벤트이므로 사용 불가.
+
+        guild: discord.Guild = find(lambda g: g.id == guild_id, bot.guilds)  # 반응 추가 이벤트가 발생한 길드
         role_setting_msg_ids: list = server_config_dict[guild.name][
             'role_setting_msg_ids']  # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
 
+        auth_msg_id: int = server_config_dict[guild.name]['auth']['auth_msg_id']  # 이벤트가 발생한 길드의 역할설정 이벤트 메세지 id
+        noauth_role_name: str = server_config_dict[guild.name]['auth']['noauth_role_name']
+        auth_role_name: str = server_config_dict[guild.name]['auth']['auth_role_name']
+
         # 서버별로 roles_dict 내부 카테고리가 다를것을 상정하고, 루프를 돌며 이모지 명칭을 찾는다.
-        emoji_name: str = payload.emoji.name
+        emoji: discord.PartialEmoji = payload.emoji
         selected_emoji_category: str = ''  # roles_dict의 카테고리 분류 저장
 
         logger.info(
-            f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji_name} 반응을 제거했습니다.')
+            f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 {guild_id} 서버의 {msg_id} 메세지에서 {emoji.name} 반응을 제거했습니다.')
 
         # 역할설정 메세지에서 일어난 이벤트라면
         if msg_id in role_setting_msg_ids:
@@ -311,13 +351,13 @@ async def on_ready():
             roles_dict = server_config_dict[guild.name]['roles_dict']
             for category in roles_dict.keys():
                 for role_emoji_name in roles_dict[category].keys():
-                    if role_emoji_name == emoji_name:
+                    if role_emoji_name == emoji.name:
                         selected_emoji_category = category
                         break
-            logger.debug(f'[bot_event] (on_raw_reaction_add) > selected_emoji_category = {category}')
+            logger.debug(f'[bot_event] (on_raw_reaction_remove) > selected_emoji_category = {selected_emoji_category}')
 
-            role_name = server_config_dict[guild.name]['roles_dict'][selected_emoji_category][payload.emoji.name]
-            logger.debug(f'[bot_event] (on_raw_reaction_add) > {user_id} 님이 신청한 역할 : {role_name}')
+            role_name = server_config_dict[guild.name]['roles_dict'][selected_emoji_category][emoji.name]
+            logger.debug(f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 신청한 역할 : {role_name}')
             role = get(guild.roles, name=role_name)
 
             if role is not None:
@@ -325,11 +365,30 @@ async def on_ready():
                 if member is not None:
                     await member.remove_roles(role, reason='Auto role assignment using bot.', atomic=True)
                 else:
-                    logger.error('[bot_event] (on_raw_reaction_add) > member not found')
+                    logger.error('[bot_event] (on_raw_reaction_remove) > member not found')
             else:
-                logger.error('[bot_event] (on_raw_reaction_add) > role not found')
+                logger.error('[bot_event] (on_raw_reaction_remove) > role not found')
         else:
-            logger.info(f'[bot_event] (on_raw_reaction_add) > {emoji_name} is used at {msg_id}')
+            logger.info(f'[bot_event] (on_raw_reaction_remove) > {emoji.name} is used at {msg_id}')
+
+        """
+        사용자 인증 부분
+        """
+        if msg_id == auth_msg_id:
+            logger.info(f'[bot_event] (on_raw_reaction_remove) > {user_id} 님이 인증 절차를 거쳤습니다.')
+            logger.debug(f'[bot_event] (on_raw_reaction_remove) > 사용된 이모지 : {emoji}, emoji.name = {emoji.name}')
+            if emoji.name == '✅':
+                member: discord.Member = guild.get_member(user_id=user_id)
+                logger.info(f'[bot_event] (on_raw_reaction_remove) > {member.display_name}님이 ✅ 반응을 제거해 인증을 취소했습니다.')
+
+                noauth_role = get(guild.roles, name=noauth_role_name)
+                logger.debug(f'[bot_event] (on_raw_reaction_remove) > noauth_role = {noauth_role}')
+                await member.add_roles(noauth_role)
+                auth_role = get(guild.roles, name=auth_role_name)
+                logger.debug(f'[bot_event] (on_raw_reaction_remove) > auth_role = {auth_role}')
+                await member.remove_roles(auth_role)
+            else:
+                pass
 
     '''
     on_message(message):
@@ -352,27 +411,37 @@ async def on_ready():
         if isinstance(e, commands.errors.CheckFailure):
             return
 
+        if 'cooldown' in str(e):
+            time_left: str = str(e).split("Try again in ")[1]
+            cooltime: float = float(time_left)
+            await ctx.send(f'명령어 재사용 대기시간이 {cooltime / 60}분 남았습니다.')
+        if 'permission(s)' in str(e):
+            missing_perm: str = str(e).replace('You are missing ', '').replace(' permission(s) to run this command.',
+                                                                               '')
+            await ctx.send(f'당신은 다음 권한을 가지고 있지 않습니다! : {missing_perm}')
+
+
+
     @commands.is_owner()
-    @bot.group(name="관리")
-    async def manage(ctx: discord.ext.commands.Context):
+    @bot.group(name="개발자")
+    async def dev(ctx: discord.ext.commands.Context):
         if ctx.author.id in developer_ids:
-            logger.info(f'{ctx.author} 유저가 명령어를 사용했습니다 :\n> {ctx.message.content}')
-            if ctx.message.content.replace(f'{bot.command_prefix}설정', '') == '':
+            logger.info(f'[dev] > {ctx.author} 유저가 명령어를 사용했습니다 :\n> {ctx.message.content}')
+            if ctx.message.content.replace(f'{bot.command_prefix}개발자', '') == '':
                 await ctx.send('현재 다음과 같은 명령어들이 있어요!\n\n' +
-                               '**종료** :개발자 전용 명령어로, 봇을 종료시킵니다.\n' +
-                               '**재시작**: 개발자 전용 명령어로, 봇을 재시작시킵니다. (WIP)\n' +
-                               '**공지하기** : 개발자 전용 명령어로, 봇이 접속해있는 서버의 봇 공지사항 채널에 공지사항을 전송합니다.\n' +
-                               '**설정저장** : 개발자 전용 명령어로, 현재 봇이 불러온 설정을 각 서버의 설정 파일로 저장합니다.\n' +
-                               '**자동역할** : 관리자 전용 명령어로, 명령어를 사용한 채널에 자동역할 메세지를 생성하고 해당 메세지에 반응을 추가하고 제거하는 방식으로 역할 부여를 자동화합니다.\n' +
-                               '**설정보기** : 관리자 전용 명령어로, 명령어를 사용한 서버의 불러와진 설정(json)을 코드 하이라이팅을 입혀 채팅으로 보여줍니다.')
+                               '> **종료** : 개발자 전용 명령어로, 봇을 종료시킵니다.\n' +
+                               '> **재시작** : 개발자 전용 명령어로, 봇을 재시작시킵니다. (WIP)\n' +
+                               '> **공지하기** : 개발자 전용 명령어로, 봇이 접속해있는 서버의 봇 공지사항 채널에 공지사항을 전송합니다.\n' +
+                               '> **설정저장** : 개발자 전용 명령어로, 현재 봇이 불러온 설정을 각 서버의 설정 파일로 저장합니다.\n')
             else:
                 pass
         else:
             logger.info(f'{ctx.author}가 관리 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
             await ctx.send('개발자만 사용할 수 있는 기능입니다!')
 
+    @commands.cooldown(rate=1, per=60)
     @commands.is_owner()
-    @manage.command(name="종료")
+    @dev.command(name="종료")
     async def stop(ctx: discord.ext.commands.Context):
         global do_reboot
         if ctx.author.id in developer_ids:
@@ -389,8 +458,9 @@ async def on_ready():
             logger.info(f'{ctx.author}가 종료 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
             await ctx.send('개발자만 사용할 수 있는 기능입니다!')
 
+    @commands.cooldown(rate=1, per=60)
     @commands.is_owner()
-    @manage.command(name="재시작")
+    @dev.command(name="재시작")
     async def restart(ctx: discord.ext.commands.Context):
         global do_reboot
         if ctx.author.id in developer_ids:
@@ -407,7 +477,54 @@ async def on_ready():
             logger.info(f'{ctx.author}가 재시작 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
             await ctx.send('개발자만 사용할 수 있는 기능입니다!')
 
+    @commands.cooldown(rate=1, per=60)
     @commands.is_owner()
+    @dev.command(name="공지하기")
+    async def sendnotice(ctx: discord.ext.commands.Context):
+        logger.info(f'{ctx.author}가 공지하기 명령어를 사용했습니다.')
+        if ctx.guild.name == official_management_servername and ctx.author.id in developer_ids:
+            await ctx.send('소속된 서버에 해당 공지사항을 전송합니다!')
+            for guild in bot.guilds:
+                if guild.name in server_config_dict.keys():
+                    notice_ch_id = server_config_dict[guild.name]['bot_ch_ids']['notice_ch_id']
+                    if notice_ch_id != 0:
+                        await bot.get_channel(notice_ch_id).send(f'봇 공지사항이 전달되었습니다! by {ctx.message.author}\n ' +
+                                                                 f'{ctx.message.content.replace(f"{bot.command_prefix}개발자 공지하기 ", "")}')
+        else:
+            await ctx.send(f'라피스봇 공식 서버인 {official_management_servername} 서버에서만 사용 가능한 명령어입니다!')
+
+    @commands.cooldown(rate=1, per=60)
+    @commands.is_owner()
+    @dev.command(name="설정저장")
+    async def savedata(ctx: discord.ext.commands.Context):
+        if ctx.author.id in developer_ids:
+            logger.info(f'{ctx.author}가 설정 저장 명령어를 사용했습니다.')
+            await ctx.send('설정 파일들을 저장합니다...')
+            result, error = save_datas()
+            await ctx.send(f'설정파일 저장 시도후 다음 결과를 얻었습니다 : {result}')
+            if error is not None:
+                await ctx.send(f'다음과 같은 오류가 발생했습니다! :\n```css\n{error.with_traceback(error.__traceback__)}\n```')
+        else:
+            logger.info(f'{ctx.author}가 설정저장 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
+            await ctx.send('개발자만 사용할 수 있는 기능입니다!')
+
+    @commands.has_guild_permissions(administrator=True)
+    @bot.group(name="관리")
+    async def manage(ctx: discord.ext.commands.Context):
+        if ctx.author.id in developer_ids:
+            logger.info(f'{ctx.author} 유저가 명령어를 사용했습니다 :\n> {ctx.message.content}')
+            if ctx.message.content.replace(f'{bot.command_prefix}관리', '') == '':
+                await ctx.send('현재 다음과 같은 명령어들이 있어요!\n\n' +
+                               '**자동역할** : 관리자 전용 명령어로, 명령어를 사용한 채널에 자동역할 메세지를 생성하고 해당 메세지에 반응을 추가하고 제거하는 방식으로 역할 부여를 자동화합니다.\n' +
+                               '**설정보기** : 관리자 전용 명령어로, 명령어를 사용한 서버의 불러와진 설정(json)을 코드 하이라이팅을 입혀 채팅으로 보여줍니다.')
+            else:
+                pass
+        else:
+            logger.info(f'{ctx.author}가 관리 명령어를 사용하려 했으나, 서버 관리자가 아니므로 거부당했습니다..')
+            await ctx.send('서버 관리자만 사용할 수 있는 기능입니다!')
+
+    @commands.cooldown(rate=1, per=60 * 60)
+    @commands.has_guild_permissions(administrator=True)
     @manage.command(name="자동역할")
     async def autorole(ctx: discord.ext.commands.Context):
         logger.info(f'{ctx.author}가 자동역할 명령어를 사용했습니다.')
@@ -441,53 +558,46 @@ async def on_ready():
         logger.debug(f'[bot_command] autorole > role_setting_msg_ids = {role_setting_msg_ids}')
         server_config_dict[guild.name]['role_setting_msg_ids'] = role_setting_msg_ids
 
-    @commands.is_owner()
-    @manage.command(name="설정저장")
-    async def savedata(ctx: discord.ext.commands.Context):
-        if ctx.author.id in developer_ids:
-            logger.info(f'{ctx.author}가 설정 저장 명령어를 사용했습니다.')
-            await ctx.send('설정 파일들을 저장합니다...')
-            result, error = save_datas()
-            await ctx.send(f'설정파일 저장 시도후 다음 결과를 얻었습니다 : {result}')
-            if error is not None:
-                await ctx.send(f'다음과 같은 오류가 발생했습니다! :\n```css\n{error.with_traceback(error.__traceback__)}\n```')
-        else:
-            logger.info(f'{ctx.author}가 설정저장 명령어를 사용하려 했으나, 개발자가 아니므로 거부당했습니다..')
-            await ctx.send('개발자만 사용할 수 있는 기능입니다!')
-
-    @commands.is_owner()
+    @commands.has_guild_permissions(administrator=True)
     @manage.command(name="설정보기")
     async def showconfig(ctx: discord.ext.commands.Context):
-        logger.info(f'{ctx.author}가 설정 보기 명령어를 사용했습니다.')
+        logger.info(f'{ctx.author}가 설정보기 명령어를 사용했습니다.')
         import json
         await ctx.send('이 서버의 설정 파일을 보여드릴게요!')
         config_str = json.dumps(obj=server_config_dict[ctx.guild.name], indent=4, ensure_ascii=False)
         await ctx.send(f'```json\n{config_str}\n```')
 
-    @commands.is_owner()
-    @manage.command(name="공지하기")
-    async def sendnotice(ctx: discord.ext.commands.Context):
-        logger.info(f'{ctx.author}가 공지하기 명령어를 사용했습니다.')
-        if ctx.guild.name == official_management_servername and ctx.author.id in developer_ids:
-            await ctx.send('소속된 서버에 해당 공지사항을 전송합니다!')
-            for guild in bot.guilds:
-                if guild.name in server_config_dict.keys():
-                    notice_ch_id = server_config_dict[guild.name]['bot_ch_ids']['notice_ch_id']
-                    if notice_ch_id != 0:
-                        await bot.get_channel(notice_ch_id).send(f'봇 공지사항이 전달되었습니다! by {ctx.message.author}\n ' +
-                                                                 f'{ctx.message.content.replace(f"{bot.command_prefix}관리 공지하기 ", "")}')
-        else:
-            await ctx.send(f'라피스봇 공식 서버인 {official_management_servername} 서버에서만 사용 가능한 명령어입니다!')
+    @commands.has_guild_permissions(administrator=True)
+    @manage.command(name="유저인증")
+    async def auth(ctx: discord.ext.commands.Context, msg: str = '✅ 이모지를 눌러 인증하세요!'):
+        global server_config_dict
+        logger.info(f'{ctx.author}가 유저인증 명령어를 사용했습니다.')
+        guild_name = ctx.guild.name
+        auth_msg = await ctx.send(f'당신이 정상적인 유저인지 확인합니다!\n> {msg}')
+        server_config_dict[guild_name]['auth']['auth_msg_id'] = auth_msg.id
+        await auth_msg.add_reaction('✅')
 
 
+# print ASCII ART
+with open(file='lapisbot_ascii.txt', mode='rt', encoding='utf-8') as f:
+    print(f.read())
+
+# init bot settings : loads config, server settings
 init()
+
+# set token
 print(f'token = {token}')
+
+# run bot
 bot.run(token)
+
+# save datas before program stops
 result, error = save_datas()
 print(f'save_datas() 실행결과 : {result}')
 if error is not None:
     print(f'save_datas() 실행결과 발생한 오류 : {error.with_traceback(error.__traceback__)}')
 
+# if reboot mode on, run reboot code
 if bot.is_closed() and do_reboot:
     print('[bot.py] > 봇 재시작 명령이 들어와 봇을 재시작합니다 :')
     excutable = sys.executable
